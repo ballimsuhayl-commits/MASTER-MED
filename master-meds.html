@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Master Meds Pro v2.21 | SAST Edition</title>
+    <style>
+        :root {
+            --bg: #f0f4f8;
+            --text: #1a202c;
+            --brand: #00b894;
+            --light-shadow: -8px -8px 15px rgba(255, 255, 255, 0.9);
+            --dark-shadow: 8px 8px 15px rgba(163, 177, 198, 0.4);
+            --inset: inset 4px 4px 8px rgba(163, 177, 198, 0.4), inset -4px -4px 8px rgba(255, 255, 255, 0.9);
+            --water: #0984e3; 
+            --danger: #ff7675; 
+            --success: #00b894;
+            --grad-morning: linear-gradient(135deg, #fce38a 0%, #f38181 100%);
+            --grad-evening: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --grad-vit: linear-gradient(135deg, #55efc4 0%, #00b894 100%);
+            --grad-move: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%);
+            --grad-diary: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
+            --warning-yellow: #feca57;
+            --gemini: #4285f4;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { 
+            font-family: 'Inter', system-ui, -apple-system, sans-serif; 
+            background: var(--bg); color: var(--text); margin: 0; padding: 15px;
+            background-image: radial-gradient(circle at 10% 20%, rgba(0, 184, 148, 0.05) 0%, transparent 40%),
+                              radial-gradient(circle at 90% 80%, rgba(9, 132, 227, 0.05) 0%, transparent 40%);
+        }
+        .container { max-width: 500px; margin: 0 auto; padding-bottom: 50px; }
+
+        .neu-card { 
+            background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px);
+            border-radius: 30px; padding: 25px; margin-bottom: 25px; 
+            box-shadow: var(--light-shadow), var(--dark-shadow); 
+            border: 1px solid rgba(255, 255, 255, 0.8); position: relative;
+            overflow: hidden; transition: transform 0.3s ease;
+        }
+        .card-accent { position: absolute; top: 0; left: 0; width: 6px; height: 100%; }
+
+        .neu-btn { 
+            background: white; border: none; border-radius: 18px; padding: 14px; 
+            font-weight: 800; cursor: pointer; 
+            box-shadow: 4px 4px 10px rgba(163, 177, 198, 0.3), -4px -4px 10px rgba(255,255,255,0.8);
+            transition: 0.2s; width: 100%; display: flex; align-items: center; 
+            justify-content: center; gap: 10px; margin-top: 15px; color: var(--text); font-size: 0.95rem;
+        }
+        .neu-btn:active { box-shadow: var(--inset); transform: scale(0.96); }
+
+        #flash-alert { position: fixed; inset: 0; z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; pointer-events: none; }
+        .flash-yellow { background: rgba(254, 202, 87, 0.9); animation: pulse-yellow 1.5s infinite; }
+        .flash-blue { background: rgba(9, 132, 227, 0.4); } 
+        .flash-orange { background: rgba(255, 154, 158, 0.5); }
+        @keyframes pulse-yellow { 0%, 100% { background: rgba(254, 202, 87, 0.9); } 50% { background: rgba(255, 235, 59, 1); } }
+        
+        #scanner-overlay { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.85); display: none; flex-direction: column; align-items: center; justify-content: center; color: white; text-align: center; }
+        .scan-line { width: 80%; height: 2px; background: var(--brand); box-shadow: 0 0 15px var(--brand); position: absolute; top: 10%; animation: scan-anim 3s infinite linear; }
+        @keyframes scan-anim { 0% { top: 10%; } 50% { top: 90%; } 100% { top: 10%; } }
+
+        .alert-msg { background: white; padding: 30px; border-radius: 35px; box-shadow: 0 30px 60px rgba(0,0,0,0.25); pointer-events: auto; width: 100%; max-width: 420px; border: 4px solid white; max-height: 80vh; overflow-y: auto; }
+
+        .water-container { height: 140px; background: white; border-radius: 25px; box-shadow: var(--inset); position: relative; overflow: hidden; margin: 20px 0; border: 4px solid white; }
+        .water-wave { position: absolute; bottom: 0; width: 200%; height: 100%; background: linear-gradient(to top, #0984e3, #74b9ff); transition: top 1s cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0.8; }
+        .water-wave::before { content: ""; position: absolute; width: 100%; height: 20px; top: -15px; left: 0; background: url('data:image/svg+xml;utf8,<svg viewBox="0 0 1200 120" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><path d="M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,52.47V0Z" opacity=".25" fill="%23fff"></path><path d="M0,0V15.81C13,36.92,27.64,56.86,47.69,72.05,99.41,111.27,165,111,224.58,91.58c31.15-10.15,60.09-26.07,89.67-39.8,40.92-19,84.73-46,130.83-49.67,36.26-2.85,70.9,9.42,98.6,31.56,31.77,25.39,62.32,62,103.63,73,40.44,10.79,81.35-6.69,119.13-24.28s75.16-39,116.92-43.05c59.73-5.85,113.28,22.88,168.9,38.84,30.2,8.66,59,6.17,87.09-7.5,22.43-10.89,48-26.93,60.65-49.24V0Z" opacity=".5" fill="%23fff"></path><path d="M0,0V5.63C149.93,59,314.09,71.32,475.83,42.57c43-7.64,84.23-20.12,127.61-26.46,59-8.63,112.48,12.24,165.56,35.4C827.93,77.22,886,95.24,951.2,90c86.53-7,172.46-45.71,248.8-84.81V0Z" fill="%23fff"></path></svg>'); background-size: 100% 20px; animation: wave 4s linear infinite; }
+        @keyframes wave { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(0,0,0,0.04); }
+        .pill-badge { background: white; border-radius: 12px; padding: 4px 12px; font-size: 0.8rem; font-weight: 800; color: var(--brand); box-shadow: 2px 2px 5px rgba(0,0,0,0.05); }
+        .badge { font-size: 0.75rem; padding: 8px 18px; border-radius: 20px; background: white; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); font-weight: 800; cursor: pointer; border: none; text-transform: uppercase; transition: 0.2s; }
+        input, select, textarea { width: 100%; padding: 14px; border-radius: 15px; border: none; box-shadow: var(--inset); background: rgba(255,255,255,0.5); margin: 10px 0; font-family: inherit; font-weight: 600; font-size: 0.9rem; }
+        h3 { font-weight: 900; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
+        .time-label { font-size: 0.7rem; color: var(--text); opacity: 0.6; font-weight: 800; display: block; margin-top: 2px; }
+        .vault-item { display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.4); padding: 10px; border-radius: 15px; margin-bottom: 8px; font-size: 0.8rem; font-weight: 700; }
+        details summary { list-style: none; cursor: pointer; font-weight: 800; color: var(--brand); font-size: 0.85rem; padding: 10px; background: rgba(255, 255, 255, 0.4); border-radius: 15px; text-align: center; margin-top: 10px; }
+        
+        /* AI Elements */
+        .ai-glow { box-shadow: 0 0 15px rgba(66, 133, 244, 0.4); border: 1px solid rgba(66, 133, 244, 0.2); }
+        .ai-badge { background: var(--gemini); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.6rem; vertical-align: middle; margin-left: 5px; }
+        #ai-response-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 20000; align-items: center; justify-content: center; padding: 20px; }
+        .ai-content-box { background: white; border-radius: 30px; padding: 30px; max-width: 450px; width: 100%; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+    </style>
+</head>
+<body>
+
+<div id="scanner-overlay">
+    <div class="scan-line"></div>
+    <div style="margin-top: 50vh;">
+        <h2 style="font-weight: 950; letter-spacing: -1px;">✨ GEMINI AI VISION</h2>
+        <p style="opacity: 0.7;">Extracting clinical instructions from your prescription...</p>
+    </div>
+</div>
+
+<div id="ai-response-modal">
+    <div class="ai-content-box">
+        <h2 style="margin-top: 0; color: var(--gemini);">✨ AI Insight</h2>
+        <div id="ai-response-text" style="line-height: 1.6; font-weight: 500; color: #4a5568; white-space: pre-line;"></div>
+        <button class="neu-btn" style="background: var(--gemini); color: white;" onclick="closeAI()">CLOSE INSIGHT</button>
+    </div>
+</div>
+
+<div id="flash-alert">
+    <div id="alert-msg-box" class="alert-msg">
+        <h2 id="alarm-title">Reminder</h2>
+        <p id="alarm-text" style="font-weight: 900; color: #1a1a1a; margin-bottom: 15px;"></p>
+        <div id="alert-items" style="text-align: left; margin: 15px 0; font-weight: 700; color: #4a5568; line-height: 1.6;"></div>
+        <button class="neu-btn" style="background: #000; color: #fff; margin-top: 20px;" onclick="dismissFlash()">I'VE TAKEN THEM</button>
+    </div>
+</div>
+
+<div class="container">
+    <header style="text-align:center; margin-bottom:30px; padding: 20px 0;">
+        <h1 style="margin:0; font-weight:950; font-size: 1.8rem; letter-spacing: -1.5px;">MASTER MEDS <span style="color:var(--brand)">PRO</span></h1>
+        <div id="live-date" style="font-weight:800; opacity:0.5; font-size:0.85rem; text-transform: uppercase; margin-top: 5px;"></div>
+    </header>
+
+    <!-- HUMIRA TRACKER -->
+    <div class="neu-card">
+        <div class="card-accent" style="background: var(--brand);"></div>
+        <div style="display:flex; justify-content:space-between; font-weight:900; font-size:0.85rem;">
+            <span>💉 HUMIRA CYCLE <small>(SAST)</small></span>
+            <span id="cycle-countdown" style="color:var(--brand)">--</span>
+        </div>
+        <div style="height:14px; background:rgba(0,0,0,0.05); box-shadow: inset 2px 2px 4px rgba(0,0,0,0.1); border-radius:10px; margin:15px 0; overflow:hidden;">
+            <div id="cycle-fill" style="height:100%; background:var(--brand); width:0%; transition:1.5s cubic-bezier(0.22, 1, 0.36, 1);"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <small id="anchor-text" style="font-weight:800; opacity:0.4;">Anchor: ---</small>
+            <input type="date" id="humira-anchor-input" style="width: auto; padding: 5px; font-size: 0.7rem; margin: 0;" onchange="updateAnchor()">
+        </div>
+    </div>
+
+    <!-- DAILY SLOTS -->
+    <div class="neu-card">
+        <div class="card-accent" style="background: var(--grad-morning);"></div>
+        <h3 style="margin:0 0 10px 0; color:#d68102;">☀️ MORNING <button class="badge" id="btn-am" onclick="toggleTake('am')" style="margin-left:auto">Mark Taken</button></h3>
+        <div id="list-am"></div>
+    </div>
+
+    <div class="neu-card">
+        <div class="card-accent" style="background: var(--grad-evening);"></div>
+        <h3 style="margin:0 0 10px 0; color:#5c6be7;">🌙 EVENING <button class="badge" id="btn-pm" onclick="toggleTake('pm')" style="margin-left:auto">Mark Taken</button></h3>
+        <div id="list-pm"></div>
+    </div>
+
+    <div class="neu-card">
+        <div class="card-accent" style="background: var(--grad-vit);"></div>
+        <h3 style="margin:0 0 10px 0; color:var(--brand);">💊 VITAMINS <button class="badge" id="btn-vit" onclick="toggleTake('vit')" style="margin-left:auto">Mark Taken</button></h3>
+        <div id="list-vit"></div>
+    </div>
+
+    <!-- REGIMEN MANAGER -->
+    <div class="neu-card ai-glow" style="border: 2px dashed var(--gemini);">
+        <h3 style="margin:0 0 15px 0; font-size: 1rem;">⚙️ REGIMEN MANAGER <span class="ai-badge">AI POWERED</span></h3>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+            <label class="neu-btn" style="background: var(--gemini); color: white; margin-top: 0; font-size: 0.75rem;">
+                ✨ AI SCAN SCRIPT
+                <input type="file" accept="image/*" style="display:none" onchange="performGeminiScan(this)">
+            </label>
+            <button class="neu-btn" style="background: white; color: var(--gemini); margin-top: 0; font-size: 0.75rem;" onclick="analyzeMedsStack()">
+                ✨ AI SAFETY CHECK
+            </button>
+        </div>
+
+        <select id="manage-slot-select" onchange="renderManageList()">
+            <option value="am">Morning Routine</option>
+            <option value="pm">Evening Routine</option>
+            <option value="vit">Vitamin Stack</option>
+        </select>
+        <div id="manage-items-list" style="max-height: 180px; overflow-y: auto; margin: 10px 0;"></div>
+        
+        <details>
+            <summary>➕ Add New Item Manually</summary>
+            <div style="padding-top: 15px;">
+                <div style="display: flex; gap: 8px;"><input type="text" id="new-item-name" placeholder="Med Name" style="flex:2"><input type="text" id="new-item-dose" placeholder="Dose" style="flex:1"></div>
+                <div style="display: flex; gap: 8px;"><input type="text" id="new-item-qty" placeholder="Qty" style="flex:2"><input type="time" id="new-item-time" style="flex:1"></div>
+                <button class="neu-btn" style="background: var(--text); color: white;" onclick="addNewMed()">CONFIRM MANUAL ADD</button>
+            </div>
+        </details>
+
+        <details>
+            <summary>🔑 AI Settings</summary>
+            <div style="padding-top: 15px;">
+                <p style="font-size: 0.7rem; opacity: 0.6; margin-bottom: 5px;">Enter your Gemini API Key for AI features:</p>
+                <input type="password" id="custom-api-key" placeholder="Paste Gemini API Key here..." onchange="updateApiKey(this.value)">
+                <p style="font-size: 0.6rem; opacity: 0.4;">Key is saved locally on your device only.</p>
+            </div>
+        </details>
+    </div>
+
+    <!-- DIARY -->
+    <div class="neu-card ai-glow">
+        <div class="card-accent" style="background: var(--grad-diary);"></div>
+        <h3 style="margin:0 0 15px 0; color:#8e44ad;">📓 PATIENT DIARY <span class="ai-badge">AI INSIGHTS</span></h3>
+        <textarea id="diary-text" placeholder="How are you feeling today?" rows="3"></textarea>
+        <div style="display:flex; gap:10px;">
+            <button id="record-btn" class="neu-btn" style="flex:1;" onclick="toggleVoice()">🎤 <span id="record-text">VOICE</span></button>
+            <button class="neu-btn" style="background:var(--brand); color:white; flex:2;" onclick="saveDiary()">SAVE ENTRY</button>
+        </div>
+        <button class="neu-btn" style="background: white; border: 1px solid var(--gemini); color: var(--gemini); margin-top: 15px;" onclick="analyzeDiaryTrends()">
+            ✨ AI WELLNESS ANALYSIS
+        </button>
+        <div id="diary-logs" style="margin-top:20px; max-height:200px; overflow-y:auto;"></div>
+    </div>
+
+    <!-- PRESCRIPTION VAULT -->
+    <div class="neu-card">
+        <h3 style="margin:0 0 15px 0;">📋 PRESCRIPTION VAULT</h3>
+        <div id="vault-list"></div>
+    </div>
+
+    <!-- HYDRATION -->
+    <div class="neu-card">
+        <div class="card-accent" style="background: var(--water);"></div>
+        <div style="display:flex; justify-content:space-between; font-weight:900;"><span>💧 HYDRATION <small>(2.5L GOAL)</small></span><span id="water-vol" style="color:var(--water)">0.0L</span></div>
+        <div class="water-container"><div id="water-fill-visual" class="water-wave" style="top: 100%;"></div><div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:2rem; color:var(--text); opacity:0.1; pointer-events:none;" id="water-pct-display">0%</div></div>
+        <div style="display:flex; gap:10px;"><button class="neu-btn" style="color:var(--water); flex:1;" onclick="addWater(0.25)">+ 250ML</button><button class="neu-btn" style="color:var(--water); flex:1;" onclick="addWater(0.5)">+ 500ML</button></div>
+        <button class="badge" onclick="resetWater()" style="width:100%; margin-top:20px; color:var(--danger); background:transparent; box-shadow:none;">Reset Water</button>
+    </div>
+
+    <div style="text-align:center; padding-top: 20px;"><button class="badge" onclick="factoryReset()" style="color:var(--danger); opacity:0.4;">FACTORY RESET SYSTEM</button></div>
+</div>
+
+<script>
+    const STRETCHES = ["Neck Rolls", "Shoulder Shrugs", "Seated Twist", "Leg Extensions", "Wrist Stretches", "Ankle Circles"];
+
+    function getSAST() { return new Date(new Date().toLocaleString("en-US", { timeZone: "Africa/Johannesburg" })); }
+
+    let state = JSON.parse(localStorage.getItem('mm_pro_v2_21')) || {
+        anchor: new Date("2026-01-23").toISOString(),
+        water: 0,
+        taken: { am: false, pm: false, vit: false },
+        diary: [],
+        vault: [],
+        apiKey: "",
+        moveRemind: false,
+        meds: {
+            am: [{n:"Cozaar", d:"100mg", q:"1 Pill", t:"08:00"}, {n:"Cymbalta", d:"90mg", q:"1 Pill", t:"08:30"}, {n:"Sulfasalazine", d:"1g", q:"2 Pills", t:"09:00"}],
+            pm: [{n:"Lyrica", d:"100mg", q:"1 Pill", t:"20:00"}, {n:"Aspavor", d:"20mg", q:"1 Pill", t:"20:30"}, {n:"Sulfasalazine", d:"1g", q:"2 Pills", t:"21:00"}],
+            vit: [{n:"Omega 3", d:"1000mg", q:"1 Pill", t:"10:00"}]
+        }
+    };
+
+    let mediaRecorder, audioChunks = [], isRecording = false;
+
+    // --- GEMINI API CORE ---
+    async function callGemini(prompt, imageData = null) {
+        const key = state.apiKey || "";
+        if (!key) {
+            showAIModal("⚠️ No API Key Found.\nPlease add your Gemini API key in the 'AI Settings' tab below.");
+            return null;
+        }
+
+        let retries = 0;
+        const maxRetries = 5;
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${key}`;
+
+        const payload = {
+            contents: [{ parts: [{ text: prompt }] }]
+        };
+
+        if (imageData) {
+            payload.contents[0].parts.push({
+                inlineData: { mimeType: "image/png", data: imageData.split(',')[1] }
+            });
+        }
+
+        while (retries < maxRetries) {
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || "No AI response received.";
+            } catch (err) {
+                retries++;
+                const delay = Math.pow(2, retries) * 1000;
+                await new Promise(res => setTimeout(res, delay));
+            }
+        }
+        return "AI Connection Error. Please try again later.";
+    }
+
+    function updateApiKey(val) {
+        state.apiKey = val;
+        save();
+    }
+
+    // --- AI FEATURES ---
+    async function performGeminiScan(input) {
+        if (!input.files.length) return;
+        const file = input.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = async (e) => {
+            document.getElementById('scanner-overlay').style.display = 'block';
+            const base64Image = e.target.result;
+
+            const prompt = `Extract medication details from this prescription. 
+                Return ONLY a JSON array of objects.
+                Keys: name, dose, quantity, slot (must be 'am', 'pm', or 'vit'), time (HH:mm format).
+                Example: [{"name": "Panado", "dose": "500mg", "quantity": "2 Pills", "slot": "am", "time": "08:00"}]`;
+
+            const rawResponse = await callGemini(prompt, base64Image);
+            document.getElementById('scanner-overlay').style.display = 'none';
+
+            if (!rawResponse) return;
+
+            try {
+                const cleanJson = rawResponse.replace(/```json|```/g, '').trim();
+                const extracted = JSON.parse(cleanJson);
+                extracted.forEach(m => {
+                    state.meds[m.slot].push({ n: m.name, d: m.dose, q: m.quantity, t: m.time });
+                });
+                state.vault.unshift({ id: Date.now(), name: file.name, data: base64Image, date: getSAST().toLocaleDateString('en-ZA') });
+                save(); renderMeds(); renderManageList(); renderVault();
+                showAIModal("✨ AI Scan Complete! Medications have been added to your regimen.");
+            } catch (err) {
+                alert("AI could not extract data. Please enter manually.");
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function analyzeMedsStack() {
+        const medsStr = JSON.stringify(state.meds);
+        const prompt = `Analyze this medication list: ${medsStr}. 
+            Identify: 
+            1. Drug interactions or conflicts.
+            2. Safety warnings.
+            3. Best time/food instructions.
+            Keep it concise and clinical.`;
+        showAIModal("✨ Analyzing your medication stack for safety...");
+        const response = await callGemini(prompt);
+        if(response) showAIModal(response);
+    }
+
+    async function analyzeDiaryTrends() {
+        if (state.diary.length === 0) return alert("Log some entries first!");
+        const logsStr = state.diary.slice(0, 10).map(l => `[${l.date}] ${l.text}`).join('\n');
+        const prompt = `Review these patient diary entries: \n${logsStr}\n
+            Summarize symptoms, side effects, and mood trends. Provide gentle, supportive medical summary.`;
+        showAIModal("✨ Analyzing your wellness trends...");
+        const response = await callGemini(prompt);
+        if(response) showAIModal(response);
+    }
+
+    function showAIModal(text) {
+        document.getElementById('ai-response-text').innerText = text;
+        document.getElementById('ai-response-modal').style.display = 'flex';
+    }
+
+    function closeAI() { document.getElementById('ai-response-modal').style.display = 'none'; }
+
+    // --- SYSTEM CORE ---
+    function init() {
+        checkDailyReset(); renderDate(); renderMeds(); renderHumira(); renderDiary(); renderWater(); renderManageList(); renderVault(); startSentinel();
+        if(state.apiKey) document.getElementById('custom-api-key').value = state.apiKey;
+    }
+
+    function checkDailyReset() {
+        const today = getSAST().toDateString();
+        const last = localStorage.getItem('mm_last_day');
+        if (last !== today) { state.water = 0; state.taken = { am: false, pm: false, vit: false }; localStorage.setItem('mm_last_day', today); save(); }
+    }
+
+    function renderDate() {
+        const now = getSAST();
+        document.getElementById('live-date').innerText = now.toLocaleDateString('en-ZA', { timeZone: 'Africa/Johannesburg', weekday: 'long', day: 'numeric', month: 'long' });
+        document.getElementById('humira-anchor-input').value = new Date(state.anchor).toISOString().split('T')[0];
+    }
+
+    function renderMeds() {
+        const day = getSAST().getDay();
+        ['am', 'pm', 'vit'].forEach(slot => {
+            let list = [...state.meds[slot]];
+            if(slot === 'am' && [1,3,5].includes(day)) { if(!list.some(m => m.n === "Folic Acid")) list.push({n:"Folic Acid", d:"5mg", q:"1 Pill", t:"08:00"}); }
+            list.sort((a, b) => (a.t || "99:99").localeCompare(b.t || "99:99"));
+            document.getElementById(`list-${slot}`).innerHTML = list.map(m => `
+                <div class="item-row">
+                    <div><span style="font-weight:700;">${m.n} <small style="opacity:0.5;">${m.d}</small></span><span class="time-label">${m.t || 'Unscheduled'}</span></div>
+                    <span class="pill-badge">${m.q}</span>
+                </div>`).join('');
+            const btn = document.getElementById(`btn-${slot}`);
+            btn.innerText = state.taken[slot] ? "✅ Done" : "Mark Taken";
+            btn.style.color = state.taken[slot] ? "var(--brand)" : "var(--text)";
+        });
+    }
+
+    function renderManageList() {
+        const slot = document.getElementById('manage-slot-select').value;
+        const list = state.meds[slot];
+        const container = document.getElementById('manage-items-list');
+        container.innerHTML = list.map((item, index) => `
+            <div class="manage-row" style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.4); padding:10px; border-radius:15px; margin-bottom:8px; box-shadow:var(--inset);">
+                <span style="font-weight:700;">${item.n} <small>(${item.t || '--:--'})</small></span>
+                <span style="color:var(--danger); cursor:pointer; font-weight:900;" onclick="deleteMedItem('${slot}', ${index})">✕</span>
+            </div>`).join('');
+    }
+
+    function addNewMed() {
+        const slot = document.getElementById('manage-slot-select').value;
+        const name = document.getElementById('new-item-name').value.trim();
+        const dose = document.getElementById('new-item-dose').value.trim();
+        const qty = document.getElementById('new-item-qty').value.trim();
+        const time = document.getElementById('new-item-time').value;
+        if (!name || !dose) return alert("Details required!");
+        state.meds[slot].push({ n: name, d: dose, q: qty || "1 Pill", t: time || "" });
+        save(); renderMeds(); renderManageList();
+        document.getElementById('new-item-name').value = ''; document.getElementById('new-item-dose').value = '';
+    }
+
+    function deleteMedItem(slot, index) { if(confirm("Remove?")) { state.meds[slot].splice(index, 1); save(); renderMeds(); renderManageList(); } }
+
+    function renderHumira() {
+        const now = getSAST(); const anchor = new Date(state.anchor);
+        const diff = Math.floor((now - anchor) / 86400000); const cycle = diff % 14; const daysLeft = 14 - cycle;
+        document.getElementById('cycle-countdown').innerText = cycle === 0 && diff >= 0 ? "💉 DUE TODAY" : `${daysLeft} DAYS LEFT`;
+        document.getElementById('cycle-fill').style.width = ((cycle/14)*100) + "%";
+        document.getElementById('anchor-text').innerText = `Anchor: ${anchor.toLocaleDateString('en-ZA')}`;
+    }
+
+    function updateAnchor() { state.anchor = new Date(document.getElementById('humira-anchor-input').value).toISOString(); save(); renderHumira(); }
+
+    function toggleTake(slot) { state.taken[slot] = !state.taken[slot]; save(); renderMeds(); dismissFlash(); }
+
+    function startSentinel() {
+        setInterval(() => {
+            const now = getSAST(); const curTimeStr = now.toTimeString().substring(0, 5); const hr = now.getHours();
+            const overlay = document.getElementById('flash-alert'); const msgBox = document.getElementById('alert-msg-box');
+            let overdueMedSlot = null; let itemsToTake = [];
+            ['am', 'pm', 'vit'].forEach(slot => {
+                if (state.taken[slot]) return;
+                const overdueMedsInSlot = state.meds[slot].filter(m => m.t && m.t <= curTimeStr);
+                if (overdueMedsInSlot.length > 0) { overdueMedSlot = slot; itemsToTake = overdueMedsInSlot; }
+            });
+            if (!overdueMedSlot) {
+                if (hr >= 9 && !state.taken.am) { overdueMedSlot = 'am'; itemsToTake = state.meds.am; }
+                else if (hr >= 20 && !state.taken.pm) { overdueMedSlot = 'pm'; itemsToTake = state.meds.pm; }
+            }
+            if (overdueMedSlot) {
+                overlay.style.display = 'flex'; overlay.className = 'flash-yellow'; msgBox.style.border = '5px solid #000';
+                document.getElementById('alarm-title').innerText = "⚠️ TIME FOR MEDS";
+                document.getElementById('alarm-text').innerText = `Your scheduled doses are due!`;
+                document.getElementById('alert-items').innerHTML = itemsToTake.map(m => `• ${m.n} (${m.q})${m.t ? ' at ' + m.t : ''}`).join('<br>');
+                speakAlarm("Please remember to take your meds");
+            } else { overlay.style.display = 'none'; }
+        }, 15000);
+    }
+
+    let voiceCache = null;
+    function getBestVoice() {
+        if (voiceCache) return voiceCache;
+        const voices = window.speechSynthesis.getVoices();
+        const priorities = ["Google UK English Female", "Microsoft Zira", "Samantha"];
+        for (let p of priorities) { const found = voices.find(v => v.name.includes(p)); if (found) { voiceCache = found; return found; } }
+        return voices[0];
+    }
+    window.speechSynthesis.onvoiceschanged = () => { getBestVoice(); };
+    function speakAlarm(text) { if (!window.speechSynthesis.speaking) { const msg = new SpeechSynthesisUtterance(text); const voice = getBestVoice(); if (voice) msg.voice = voice; msg.rate = 1.0; msg.pitch = 1.1; window.speechSynthesis.speak(msg); } }
+    function dismissFlash() { document.getElementById('flash-alert').style.display = 'none'; window.speechSynthesis.cancel(); }
+
+    function addWater(v) { state.water += v; save(); renderWater(); }
+    function resetWater() { if(confirm("Clear?")) { state.water = 0; save(); renderWater(); } }
+    function renderWater() {
+        const pct = Math.min((state.water / 2.5) * 100, 100);
+        document.getElementById('water-vol').innerText = state.water.toFixed(2) + "L";
+        document.getElementById('water-fill-visual').style.top = (100 - pct) + "%";
+        document.getElementById('water-pct-display').innerText = Math.round(pct) + "%";
+    }
+
+    function saveDiary() {
+        const text = document.getElementById('diary-text').value; if (!text) return;
+        state.diary.unshift({ id: Date.now(), date: getSAST().toLocaleString('en-ZA'), text: text });
+        document.getElementById('diary-text').value = ""; save(); renderDiary();
+    }
+    function renderDiary() {
+        document.getElementById('diary-logs').innerHTML = state.diary.map(e => `
+            <div class="diary-entry" style="background:rgba(255,255,255,0.4); padding:15px; border-radius:15px; margin-bottom:10px; box-shadow:var(--inset);">
+                <div style="font-size:0.7rem; font-weight:800; opacity:0.5; margin-bottom:5px;">${e.date}</div>
+                <div style="font-weight:600;">${e.text}</div>
+                ${e.audio ? `<audio controls style="width:100%; margin-top:10px; height:30px;" src="${e.audio}"></audio>` : ''}
+            </div>`).join('');
+    }
+
+    function renderVault() {
+        const container = document.getElementById('vault-list');
+        if(state.vault.length === 0) { container.innerHTML = '<p style="font-size:0.8rem; text-align:center; opacity:0.5;">No prescriptions.</p>'; return; }
+        container.innerHTML = state.vault.map(v => `
+            <div class="vault-item"><span>📄 ${v.name.substring(0, 15)}... <small>(${v.date})</small></span>
+                <div style="display:flex; gap:10px;"><button class="badge" style="padding: 4px 10px; font-size: 0.6rem;" onclick="window.open('${v.data}')">VIEW</button><button class="badge" style="padding: 4px 10px; font-size: 0.6rem; color: var(--danger);" onclick="deleteVaultItem(${v.id})">DEL</button></div>
+            </div>`).join('');
+    }
+
+    function deleteVaultItem(id) { if(confirm("Delete?")) { state.vault = state.vault.filter(v => v.id !== id); save(); renderVault(); } }
+    function nextStretch() { document.getElementById('stretch-display').innerText = STRETCHES[Math.floor(Math.random() * STRETCHES.length)]; }
+    function toggleMoveReminder() { state.moveRemind = !state.moveRemind; save(); document.getElementById('move-reminder-btn').innerText = state.moveRemind ? "Reminder: ON" : "Reminder: OFF"; }
+    
+    async function toggleVoice() {
+        if (!isRecording) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream); audioChunks = [];
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' });
+                    const reader = new FileReader();
+                    reader.onloadend = () => { state.diary.unshift({ id: Date.now(), date: getSAST().toLocaleString('en-ZA'), text: "[Voice Note]", audio: reader.result }); save(); renderDiary(); };
+                    reader.readAsDataURL(audioBlob);
+                };
+                mediaRecorder.start(); isRecording = true; document.getElementById('record-text').innerText = "REC...";
+            } catch (err) { alert("Mic required."); }
+        } else { mediaRecorder.stop(); isRecording = false; document.getElementById('record-text').innerText = "VOICE"; }
+    }
+
+    function factoryReset() { if(confirm("Wipe ALL data?")) { localStorage.clear(); location.reload(); } }
+    function save() { localStorage.setItem('mm_pro_v2_21', JSON.stringify(state)); }
+    window.onload = init;
+</script>
+</body>
+</html>
