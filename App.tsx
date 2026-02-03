@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   HeartPulse, Siren, Sun, MessageCircle, FolderOpen, Settings,
@@ -7,7 +6,7 @@ import {
   Activity, Thermometer, Trash2, Clock, Volume2, VolumeX, Bell, Plus,
   MicOff, Waves, X, Smile, Meh, Frown, Sparkle, 
   Stethoscope as DoctorIcon, Utensils, Share2, UserPlus, PhoneForwarded, Lock, ShieldCheck,
-  ChevronRight, MapPin
+  ChevronRight, MapPin, File as FileIcon, Key, StickyNote, Link2
 } from 'lucide-react';
 import { Medication, Injection, VaultItem, DiaryEntry, Stats, EmergencyContact, Pharmacy, SafetyAnalysis, FlareForecast, DietPlan, Symptom } from './types';
 import { VIVID_THEME, LIFESTYLE_TAGS, QUADRANTS, DAYS_OF_WEEK } from './constants';
@@ -130,6 +129,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
   const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(new Date());
+  const [hasApiKey, setHasApiKey] = useState(false);
 
   // Revision and Production Locking
   const REVISION = "1.1.0-GOLD";
@@ -164,14 +164,22 @@ const App: React.FC = () => {
   const [morningTab, setMorningTab] = useState<'pending' | 'taken'>('pending');
   const [eveningTab, setEveningTab] = useState<'pending' | 'taken'>('pending');
   const [injectionTab, setInjectionTab] = useState<'pending' | 'taken'>('pending');
+  
+  // Diary Form State
   const [diaryInput, setDiaryInput] = useState("");
   const [dayQuality, setDayQuality] = useState<'good' | 'neutral' | 'bad'>('neutral');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  // Symptom Form State
+  const [symptomInput, setSymptomInput] = useState("");
+  const [symptomSeverity, setSymptomSeverity] = useState(5);
+  const [linkedMedId, setLinkedMedId] = useState<number | undefined>(undefined);
+
   const [safetyAnalysis, setSafetyAnalysis] = useState<SafetyAnalysis | null>(null);
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
   const [newConditionInput, setNewConditionInput] = useState("");
   const [newContact, setNewContact] = useState({ name: '', phone: '' });
-  const [symptomLog, setSymptomLog] = useState({ name: '', severity: 5 });
   const [newInjection, setNewInjection] = useState({ name: 'Humira', dosage: '40mg', site: 'Left Abdomen', time: '09:00', frequency: 'Weekly', schedule: ['Fri'] });
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -183,6 +191,14 @@ const App: React.FC = () => {
 
   // Persistence Load
   useEffect(() => {
+    const checkKey = async () => {
+      if (typeof (window as any).aistudio?.hasSelectedApiKey === 'function') {
+        const selected = await (window as any).aistudio.hasSelectedApiKey();
+        setHasApiKey(selected);
+      }
+    };
+    checkKey();
+
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
@@ -222,15 +238,18 @@ const App: React.FC = () => {
   const filteredInjections = (status: 'pending' | 'taken') => 
     injections.filter(i => (status === 'taken' ? i.status !== 'pending' : i.status === 'pending'));
 
-  // --- Real-time Voice Logic (Doctor B) ---
+  // --- REWIRED Real-time Voice Logic (Doctor B) ---
   const startLiveSession = async () => {
     if (isLiveActive) return;
     setIsLiveActive(true);
     setLoading(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const inputAudioCtx = new AudioContext({ sampleRate: 16000 });
-      const outputAudioCtx = new AudioContext({ sampleRate: 24000 });
+      const inputAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      const outputAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      const outputNode = outputAudioCtx.createGain();
+      outputNode.connect(outputAudioCtx.destination);
+      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-12-2025',
@@ -247,36 +266,51 @@ const App: React.FC = () => {
             scriptProcessor.connect(inputAudioCtx.destination);
           },
           onmessage: async (m: LiveServerMessage) => {
-            if (m.serverContent?.outputTranscription) setLiveTranscription(p => p + m.serverContent!.outputTranscription!.text);
+            if (m.serverContent?.outputTranscription) {
+              setLiveTranscription(p => p + m.serverContent!.outputTranscription!.text);
+            }
+            
             const b64 = m.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (b64) {
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputAudioCtx.currentTime);
               const buf = await decodeAudioData(decode(b64), outputAudioCtx, 24000, 1);
               const s = outputAudioCtx.createBufferSource();
-              s.buffer = buf; s.connect(outputAudioCtx.destination);
+              s.buffer = buf;
+              s.connect(outputNode);
               s.addEventListener('ended', () => audioSourcesRef.current.delete(s));
               s.start(nextStartTimeRef.current);
               nextStartTimeRef.current += buf.duration;
               audioSourcesRef.current.add(s);
             }
+
             if (m.serverContent?.interrupted) {
-              for (const s of audioSourcesRef.current.values()) { try { s.stop(); } catch(e) {} audioSourcesRef.current.delete(s); }
+              for (const s of audioSourcesRef.current.values()) {
+                try { s.stop(); } catch(e) {}
+                audioSourcesRef.current.delete(s);
+              }
               nextStartTimeRef.current = 0;
             }
           },
           onclose: () => setIsLiveActive(false),
-          onerror: () => setIsLiveActive(false)
+          onerror: (e) => {
+            console.error("Doctor B Voice Error:", e);
+            setIsLiveActive(false);
+          }
         },
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } },
-          systemInstruction: `You are Doctor B, a gentle clinical specialist. Speak naturally and concisely. Conditions: ${conditions.join(', ')}.`,
+          systemInstruction: `You are Doctor B, a world-class Clinical Specialist. You are currently in a live voice consultation. Speak naturally, be concise, and help the patient manage their ${conditions.join(', ') || 'health'}.`,
           outputAudioTranscription: {},
           inputAudioTranscription: {}
         }
       });
       liveSessionRef.current = { sessionPromise, stream, inputAudioCtx, outputAudioCtx };
-    } catch (e) { setIsLiveActive(false); setLoading(false); }
+    } catch (e) { 
+      setIsLiveActive(false); 
+      setLoading(false); 
+      console.error("Live Session Initiation Failed:", e);
+    }
   };
 
   const stopLiveSession = () => {
@@ -287,6 +321,15 @@ const App: React.FC = () => {
       liveSessionRef.current.sessionPromise.then((s:any) => s.close());
     }
     setIsLiveActive(false);
+    setLiveTranscription("");
+  };
+
+  const openAdminKeySelector = async () => {
+    if (typeof (window as any).aistudio?.openSelectKey === 'function') {
+      await (window as any).aistudio.openSelectKey();
+      setHasApiKey(true);
+      window.location.reload(); 
+    }
   };
 
   // --- Core Actions ---
@@ -298,12 +341,15 @@ const App: React.FC = () => {
     try {
       const res = await gemini.sendChatMessage(msg);
       setChatHistory(p => [...p, { role: 'model', text: res || "Doctor B is temporarily unavailable." }]);
-    } catch(e) { setChatHistory(p => [...p, { role: 'model', text: "Consultation error." }]); }
-    finally { setLoading(false); }
+    } catch(e) { 
+      setChatHistory(p => [...p, { role: 'model', text: "Consultation error. Please retry." }]); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const updateXP = useCallback((amt: number) => {
-    setStats(p => ({ ...p, xp: p.xp + amt, level: Math.floor((p.xp + amt) / 1000) + 1, wellness: Math.min(100, p.wellness + 2) }));
+    setStats(p => ({ ...p, xp: p.xp + amt, level: Math.floor((p.xp + amt) / 1000) + 1, wellness: Math.min(100, p.wellness + Math.floor(amt/50)) }));
   }, []);
 
   const handleMedAction = (id: number, action: 'take' | 'skip') => {
@@ -318,27 +364,59 @@ const App: React.FC = () => {
     if (activeAlarmItem?.data?.id === id) setActiveAlarmItem(null);
   };
 
+  // Diary Functions
+  const saveDiaryEntry = () => {
+    if (!diaryInput.trim()) return;
+    const entry: DiaryEntry = {
+      id: Date.now(),
+      text: diaryInput,
+      tags: selectedTags,
+      quality: dayQuality,
+      time: new Date().toLocaleTimeString(),
+      date: new Date().toLocaleDateString()
+    };
+    setDiary(p => [entry, ...p]);
+    setDiaryInput("");
+    setSelectedTags([]);
+    updateXP(60);
+  };
+
+  const deleteDiaryEntry = (id: number) => {
+    setDiary(p => p.filter(e => e.id !== id));
+  };
+
   const saveSymptomLog = () => {
-    if (!symptomLog.name) return;
-    const s: Symptom = { id: Date.now(), ...symptomLog, time: new Date().toLocaleTimeString(), date: new Date().toLocaleDateString() };
+    if (!symptomInput.trim()) return;
+    const s: Symptom = {
+      id: Date.now(),
+      name: symptomInput,
+      severity: symptomSeverity,
+      time: new Date().toLocaleTimeString(),
+      date: new Date().toLocaleDateString(),
+      linkedMedId: linkedMedId
+    };
     setSymptoms(p => [s, ...p]);
-    setSymptomLog({ name: '', severity: 5 });
+    setSymptomInput("");
+    setSymptomSeverity(5);
+    setLinkedMedId(undefined);
     updateXP(40);
   };
 
-  const contactPharmacy = () => {
-    if (!pharmacy.phone) return;
-    const cleanPhone = pharmacy.phone.replace(/\D/g, '');
-    window.open(`https://wa.me/${cleanPhone}?text=Hello, this is a refill request from Master Meds Pro.`, '_blank');
+  const deleteSymptomLog = (id: number) => {
+    setSymptoms(p => p.filter(s => s.id !== id));
   };
 
   const triggerVoiceAlert = async (text: string) => {
-    const audioB64 = await gemini.generateReminderAudio(text);
-    if (audioB64) {
-      const ctx = new AudioContext();
-      const buf = await decodeAudioData(decode(audioB64), ctx, 24000, 1);
-      const s = ctx.createBufferSource();
-      s.buffer = buf; s.connect(ctx.destination); s.start();
+    try {
+      const audioB64 = await gemini.generateReminderAudio(text);
+      if (audioB64) {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const buf = await decodeAudioData(decode(audioB64), ctx, 24000, 1);
+        const s = ctx.createBufferSource();
+        s.buffer = buf; s.connect(ctx.destination); s.start();
+      }
+    } catch (e) {
+      console.warn("Audio alert failed:", e);
     }
   };
 
@@ -347,7 +425,6 @@ const App: React.FC = () => {
     const time = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     const currentDay = DAYS_OF_WEEK[now.getDay()];
     
-    // Med Reminders
     meds.filter(m => m.status === 'pending').forEach(m => {
       const key = `med-${m.id}-${time}`;
       if (m.time === time && m.schedule.includes(currentDay) && !remindedItems.has(key)) {
@@ -357,7 +434,6 @@ const App: React.FC = () => {
       }
     });
 
-    // Injection Reminders
     injections.filter(i => i.status === 'pending').forEach(i => {
       const key = `inj-${i.id}-${time}`;
       if (i.time === time && i.schedule.includes(currentDay) && !remindedItems.has(key)) {
@@ -366,8 +442,13 @@ const App: React.FC = () => {
         triggerVoiceAlert(`Clinical Reminder: It's time for your ${i.name} injection.`);
       }
     });
+  }, [now, meds, injections, alarmsEnabled, remindedItems]);
 
-  }, [now, meds, injections, alarmsEnabled]);
+  const contactPharmacy = () => {
+    if (!pharmacy.phone) return;
+    const cleanPhone = pharmacy.phone.replace(/\D/g, '');
+    window.open(`https://wa.me/${cleanPhone}?text=Hello, this is a refill request from Master Meds Pro.`, '_blank');
+  };
 
   return (
     <div className={`max-w-md mx-auto min-h-screen transition-all duration-300 pb-32 ${activeAlarmItem ? 'animate-clinical-flash' : 'bg-[#F8FAFC]'}`}>
@@ -401,7 +482,7 @@ const App: React.FC = () => {
         {loading && (
           <div className="fixed inset-0 bg-white/90 backdrop-blur-xl z-[999] flex flex-col items-center justify-center">
             <Loader2 size={64} className="text-teal-600 animate-spin" />
-            <p className="font-black text-xl uppercase tracking-widest text-teal-600 animate-pulse mt-4">Consulting Doctor B...</p>
+            <p className="font-black text-xl uppercase tracking-widest text-teal-600 animate-pulse mt-4 text-center px-6">Doctor B is Analyzing Your Clinical Data...</p>
           </div>
         )}
 
@@ -412,7 +493,7 @@ const App: React.FC = () => {
                   <Activity size={32} className="animate-pulse" />
                   <div><p className="text-[10px] font-black uppercase opacity-60">Regimen Adherence</p><p className="text-2xl font-black">{stats.streak} Days</p></div>
                </div>
-               <button onClick={async () => { setLoading(true); const res = await gemini.runClinicalAnalysis(meds, diary, symptoms, conditions); setSafetyAnalysis(res); setShowSafetyModal(true); setLoading(false); }} className="bg-white/20 px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-white/30 active:scale-95 transition-all">Audit Regimen</button>
+               <button onClick={async () => { setLoading(true); try { const res = await gemini.runClinicalAnalysis(meds, diary, symptoms, conditions); setSafetyAnalysis(res); setShowSafetyModal(true); } catch(e) { alert("Analysis failed. Check connection."); } finally { setLoading(false); } }} className="bg-white/20 px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-white/30 active:scale-95 transition-all">Audit Regimen</button>
             </div>
 
             <DashboardCard colorClass={VIVID_THEME.yellow} title="Morning Regimen" icon={Sun} noPadding>
@@ -479,13 +560,142 @@ const App: React.FC = () => {
           </>
         )}
 
+        {activeTab === 'diary' && (
+          <div className="space-y-6">
+            <DashboardCard colorClass={VIVID_THEME.blue} title="Clinical Logbook" icon={StickyNote}>
+              <div className="space-y-4">
+                <div className="flex gap-4 justify-between">
+                  <button onClick={() => setDayQuality('good')} className={`flex-1 p-4 rounded-3xl border-2 transition-all flex flex-col items-center gap-1 ${dayQuality === 'good' ? 'bg-green-100 border-green-500 text-green-700' : 'bg-white border-gray-100 grayscale opacity-40'}`}>
+                    <Smile size={32} />
+                    <span className="text-[9px] font-black uppercase">Good</span>
+                  </button>
+                  <button onClick={() => setDayQuality('neutral')} className={`flex-1 p-4 rounded-3xl border-2 transition-all flex flex-col items-center gap-1 ${dayQuality === 'neutral' ? 'bg-amber-100 border-amber-500 text-amber-700' : 'bg-white border-gray-100 grayscale opacity-40'}`}>
+                    <Meh size={32} />
+                    <span className="text-[9px] font-black uppercase">Neutral</span>
+                  </button>
+                  <button onClick={() => setDayQuality('bad')} className={`flex-1 p-4 rounded-3xl border-2 transition-all flex flex-col items-center gap-1 ${dayQuality === 'bad' ? 'bg-red-100 border-red-500 text-red-700' : 'bg-white border-gray-100 grayscale opacity-40'}`}>
+                    <Frown size={32} />
+                    <span className="text-[9px] font-black uppercase">Poor</span>
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-2 py-2">
+                  {LIFESTYLE_TAGS.map(tag => (
+                    <button 
+                      key={tag.label} 
+                      onClick={() => setSelectedTags(p => p.includes(tag.label) ? p.filter(x => x !== tag.label) : [...p, tag.label])}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[9px] font-black uppercase transition-all border-2 ${selectedTags.includes(tag.label) ? `${tag.color} border-current` : 'bg-white border-gray-100 text-gray-400'}`}
+                    >
+                      <tag.icon size={12}/> {tag.label}
+                    </button>
+                  ))}
+                </div>
+
+                <textarea 
+                  value={diaryInput} 
+                  onChange={e => setDiaryInput(e.target.value)} 
+                  placeholder="Clinical notes for today..." 
+                  className="w-full p-4 rounded-[2rem] border-2 border-gray-100 text-sm font-bold min-h-[120px] outline-none focus:border-blue-400 transition-all"
+                />
+
+                <button onClick={saveDiaryEntry} className="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black uppercase text-sm shadow-xl active:scale-95 transition-all">Submit Daily Log</button>
+              </div>
+            </DashboardCard>
+
+            <DashboardCard colorClass={VIVID_THEME.red} title="Symptom Tracker" icon={Thermometer}>
+               <div className="space-y-4">
+                  <input 
+                    value={symptomInput} 
+                    onChange={e => setSymptomInput(e.target.value)} 
+                    placeholder="Describe symptom (e.g. Fatigue, Joint Pain)" 
+                    className="w-full p-4 rounded-[1.5rem] border-2 border-gray-100 text-sm font-bold"
+                  />
+                  <div>
+                    <div className="flex justify-between items-center mb-2 px-2">
+                      <span className="text-[10px] font-black uppercase text-red-400">Severity</span>
+                      <span className="text-xl font-black text-red-600">{symptomSeverity}</span>
+                    </div>
+                    <input 
+                      type="range" min="1" max="10" 
+                      value={symptomSeverity} 
+                      onChange={e => setSymptomSeverity(parseInt(e.target.value))} 
+                      className="w-full accent-red-600"
+                    />
+                  </div>
+                  <div className="p-3 bg-white/50 rounded-xl border border-red-100">
+                    <label className="text-[9px] font-black uppercase text-red-400 flex items-center gap-1 mb-2"><Link2 size={10}/> Linked to Medication?</label>
+                    <select 
+                      value={linkedMedId || ""} 
+                      onChange={e => setLinkedMedId(e.target.value ? parseInt(e.target.value) : undefined)}
+                      className="w-full bg-white p-2 rounded-lg border text-[10px] font-bold"
+                    >
+                      <option value="">No medication link</option>
+                      {meds.map(m => <option key={m.id} value={m.id}>{m.n} ({m.d})</option>)}
+                    </select>
+                  </div>
+                  <button onClick={saveSymptomLog} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs active:scale-95 transition-all">Record Symptom</button>
+               </div>
+            </DashboardCard>
+
+            <div className="space-y-4">
+               <h3 className="text-xs font-black uppercase text-gray-400 tracking-widest px-2">Recent Clinical History</h3>
+               {diary.length === 0 && symptoms.length === 0 && (
+                 <div className="text-center py-10 opacity-30 italic font-bold uppercase text-[10px]">No logs recorded yet.</div>
+               )}
+               {diary.map(entry => (
+                 <div key={entry.id} className="relative p-6 bg-white rounded-[2.5rem] border-2 border-gray-50 shadow-sm transition-all hover:border-blue-100">
+                    <button onClick={() => deleteDiaryEntry(entry.id)} className="absolute top-6 right-6 text-gray-300 hover:text-red-500 transition-colors">
+                      <Trash2 size={18}/>
+                    </button>
+                    <div className="flex justify-between items-start mb-4">
+                       <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${entry.quality === 'good' ? 'bg-green-100 text-green-600' : entry.quality === 'neutral' ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}`}>
+                             {entry.quality === 'good' ? <Smile size={20}/> : entry.quality === 'neutral' ? <Meh size={20}/> : <Frown size={20}/>}
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black uppercase text-gray-800">{entry.date}</p>
+                            <p className="text-[8px] font-bold text-gray-400">{entry.time}</p>
+                          </div>
+                       </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mb-3">
+                       {entry.tags.map(t => <span key={t} className="px-2 py-0.5 bg-gray-50 text-gray-400 rounded-lg text-[7px] font-black uppercase">{t}</span>)}
+                    </div>
+                    <p className="text-sm font-bold text-gray-700 leading-relaxed italic">"{entry.text}"</p>
+                 </div>
+               ))}
+               {symptoms.map(s => {
+                 const linkedMed = meds.find(m => m.id === s.linkedMedId);
+                 return (
+                 <div key={s.id} className="relative p-4 bg-white rounded-3xl border-2 border-red-50 flex flex-col transition-all hover:border-red-100">
+                    <button onClick={() => deleteSymptomLog(s.id)} className="absolute top-4 right-4 text-gray-300 hover:text-red-500 transition-colors">
+                      <Trash2 size={16}/>
+                    </button>
+                    <div className="flex items-center gap-3">
+                       <div className="w-10 h-10 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center font-black">{s.severity}</div>
+                       <div>
+                          <p className="text-sm font-black text-red-950 uppercase leading-none">{s.name}</p>
+                          <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">{s.date} • {s.time}</p>
+                       </div>
+                    </div>
+                    {linkedMed && (
+                      <div className="mt-3 px-3 py-1.5 bg-red-50 text-red-700 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 border border-red-100 self-start">
+                        <Link2 size={12}/> Linked: {linkedMed.n}
+                      </div>
+                    )}
+                 </div>
+               )})}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'diet' && (
           <DashboardCard colorClass={VIVID_THEME.green} title="Clinical Nutrition" icon={Utensils}>
              {!dietPlan ? (
                <div className="text-center py-12 px-6">
                  <Sparkle className="text-green-600 mx-auto mb-6" size={48} />
                  <p className="text-green-800 font-bold mb-8 text-sm">Doctor B can generate a specific diet compatible with: {conditions.join(', ') || 'Global Profile'}.</p>
-                 <button onClick={async () => { setLoading(true); const p = await gemini.generateDietPlan(meds, conditions); setDietPlan(p); setLoading(false); }} className="w-full py-5 bg-white text-green-700 font-black rounded-3xl border-4 border-green-200 shadow-xl uppercase text-sm active:scale-95 hover:border-green-300 transition-all">Calculate AI Menu</button>
+                 <button onClick={async () => { setLoading(true); try { const p = await gemini.generateDietPlan(meds, conditions); setDietPlan(p); } catch(e) { alert("Nutrition calculator unavailable."); } finally { setLoading(false); } }} className="w-full py-5 bg-white text-green-700 font-black rounded-3xl border-4 border-green-200 shadow-xl uppercase text-sm active:scale-95 hover:border-green-300 transition-all">Calculate AI Menu</button>
                </div>
              ) : (
                <div className="space-y-4">
@@ -518,6 +728,11 @@ const App: React.FC = () => {
                   <div className={`p-5 rounded-[2.2rem] max-w-[85%] font-bold text-sm shadow-sm transition-all hover:shadow-md ${m.role === 'user' ? 'bg-teal-600 text-white' : 'bg-white border-2 border-teal-50 text-teal-900'}`}>{m.text}</div>
                 </div>
               ))}
+              {loading && chatHistory[chatHistory.length-1]?.role === 'user' && (
+                <div className="flex justify-start">
+                  <div className="p-5 rounded-[2.2rem] bg-white border-2 border-teal-50 text-teal-400 animate-pulse font-black uppercase text-[10px]">Thinking...</div>
+                </div>
+              )}
               <div ref={chatEndRef} />
             </div>
             <div className="flex gap-3 bg-white p-3 rounded-full border-2 border-teal-100 shadow-xl items-center">
@@ -537,21 +752,46 @@ const App: React.FC = () => {
                 </div>
                 <div onClick={() => scriptInputRef.current?.click()} className="bg-white p-8 rounded-[2.5rem] border-4 border-dashed border-blue-200 flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-all hover:bg-blue-50">
                   <FileText size={40} className="text-blue-500 mb-3" />
-                  <span className="text-[10px] font-black uppercase text-blue-700 leading-tight">Scan New<br/>Script</span>
+                  <span className="text-[10px] font-black uppercase text-blue-700 leading-tight">Scan New<br/>Script (PDF/Img)</span>
                 </div>
-                {pharmacy.phone && (
-                  <div onClick={contactPharmacy} className="bg-green-600 p-8 rounded-[2.5rem] flex flex-col items-center justify-center text-center text-white col-span-2 cursor-pointer active:scale-95 shadow-lg border-b-4 border-green-800 hover:bg-green-700 transition-all">
-                    <MessageCircle size={40} className="mb-3" />
-                    <span className="text-[10px] font-black uppercase">Refill via WhatsApp</span>
-                  </div>
-                )}
                 {vault.map(v => (
-                   <div key={v.id} className="bg-white p-3 rounded-3xl border-2 border-gray-100 shadow-sm overflow-hidden transition-all hover:scale-[1.05]">
-                      <img src={v.data} className="w-full h-32 object-cover rounded-2xl mb-2" />
+                   <div key={v.id} className="relative bg-white p-3 rounded-3xl border-2 border-gray-100 shadow-sm overflow-hidden transition-all hover:scale-[1.05]">
+                      <button onClick={(e) => { e.stopPropagation(); setVault(p => p.filter(x => x.id !== v.id)); }} className="absolute top-4 right-4 z-10 p-2 bg-black/40 text-white rounded-full hover:bg-red-500 transition-all">
+                        <Trash2 size={14}/>
+                      </button>
+                      {v.mime === 'application/pdf' ? (
+                        <div className="w-full h-32 bg-gray-50 flex items-center justify-center rounded-2xl mb-2">
+                          <FileIcon size={40} className="text-gray-400" />
+                        </div>
+                      ) : (
+                        <img src={v.data} className="w-full h-32 object-cover rounded-2xl mb-2" />
+                      )}
                       <h4 className="font-black text-[10px] truncate px-1">{v.name}</h4>
                    </div>
                 ))}
              </div>
+          </DashboardCard>
+        )}
+
+        {activeTab === 'admin' && (
+          <DashboardCard colorClass={VIVID_THEME. black} title="Clinical Administration" icon={ShieldCheck}>
+            <div className="space-y-6 py-4">
+              <div className="p-6 bg-white/10 rounded-[2rem] border border-white/20">
+                <div className="flex items-center gap-3 mb-4">
+                  <Key className="text-teal-400" size={24} />
+                  <h4 className="font-black text-white uppercase text-sm">Clinical Intelligence Engine</h4>
+                </div>
+                <p className="text-xs text-white/60 font-medium leading-relaxed mb-6">
+                  Manage your connection to advanced medical reasoning models. This system supports high-performance clinical analysis via private API keys.
+                </p>
+                <button 
+                  onClick={openAdminKeySelector} 
+                  className="w-full py-4 bg-teal-600 text-white font-black rounded-2xl uppercase text-[10px] shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <Sparkle size={14}/> {hasApiKey ? "Update Clinical License" : "Insert API Connection"}
+                </button>
+              </div>
+            </div>
           </DashboardCard>
         )}
 
@@ -593,13 +833,18 @@ const App: React.FC = () => {
                 </div>
              </DashboardCard>
 
-             <DashboardCard colorClass={VIVID_THEME.green} title="Pharmacy WhatsApp" icon={Share2}>
+             <DashboardCard colorClass={VIVID_THEME.green} title="Pharmacy Hub" icon={Share2}>
                 <div className="space-y-4">
                    <div className="flex flex-col gap-2">
                      <p className="text-[9px] font-black uppercase text-green-700 ml-1">Connect your preferred pharmacy</p>
                      <input value={pharmacy.name} onChange={e=>setPharmacy({...pharmacy, name: e.target.value})} placeholder="Pharmacy Name" className="w-full p-3 border-2 rounded-xl text-xs font-bold bg-white outline-none focus:border-green-500 transition-colors" />
                      <input value={pharmacy.phone} onChange={e=>setPharmacy({...pharmacy, phone: e.target.value})} placeholder="Phone (+ country code)" className="w-full p-3 border-2 rounded-xl text-xs font-bold bg-white outline-none focus:border-green-500 transition-colors" />
                    </div>
+                   {pharmacy.phone && (
+                      <button onClick={contactPharmacy} className="w-full py-4 bg-green-600 text-white rounded-xl flex items-center justify-center font-black uppercase text-[10px] gap-2 shadow-lg active:scale-95">
+                        <MessageCircle size={16}/> WhatsApp Prescription Refill
+                      </button>
+                   )}
                 </div>
              </DashboardCard>
 
@@ -629,6 +874,7 @@ const App: React.FC = () => {
               <div className="space-y-4">
                  <button onClick={() => window.open('tel:911')} className="w-full py-6 bg-red-600 text-white rounded-3xl font-black uppercase flex items-center justify-center gap-4 text-xl shadow-xl active:scale-95 transition-transform"><Phone size={32}/> CALL 911</button>
                  <div className="grid grid-cols-1 gap-3 max-h-48 overflow-y-auto pr-2 no-scrollbar">
+                    {emergencyContacts.length === 0 && <p className="text-[10px] text-gray-400 font-bold uppercase italic">No emergency contacts set</p>}
                     {emergencyContacts.map(c => (
                       <button key={c.id} onClick={() => window.open(`tel:${c.phone}`)} className="p-5 bg-red-50 text-red-700 rounded-2xl font-black uppercase text-xs flex justify-between items-center border-2 border-red-100 active:scale-95 hover:bg-red-100 transition-all">
                         <span className="truncate flex-1 text-left">{c.name}</span>
@@ -638,6 +884,29 @@ const App: React.FC = () => {
                  </div>
                  <button onClick={() => setShowSOSModal(false)} className="w-full py-4 bg-gray-100 text-gray-500 rounded-2xl font-black uppercase text-[10px] active:scale-95 transition-all">Close</button>
               </div>
+           </div>
+        </div>
+      )}
+
+      {/* Safety Modal */}
+      {showSafetyModal && safetyAnalysis && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-black/60 backdrop-blur-md">
+           <div className="bg-white w-full max-w-md rounded-[3rem] p-10 overflow-y-auto max-h-[80vh] shadow-2xl border-t-8 border-teal-500">
+              <div className="flex items-center gap-3 mb-6">
+                <ShieldCheck className="text-teal-600" size={32} />
+                <h2 className="text-3xl font-black uppercase text-teal-800">Safety Audit</h2>
+              </div>
+              <div className="space-y-6">
+                 <div>
+                    <h4 className="text-[10px] font-black uppercase text-red-500 mb-2 tracking-widest">Clinical Risks Identified</h4>
+                    {safetyAnalysis.interactions.length === 0 && <p className="text-xs font-bold text-gray-400">No major interactions detected.</p>}
+                    {safetyAnalysis.interactions.map((it, i) => <div key={i} className="p-4 bg-red-50 text-red-700 rounded-2xl text-xs font-bold mb-2 leading-relaxed border border-red-100 shadow-sm">{it}</div>)}
+                 </div>
+                 <div className="p-6 bg-teal-50 rounded-2xl border-2 border-teal-100 shadow-inner">
+                    <p className="text-sm font-bold text-teal-900 leading-relaxed">{safetyAnalysis.summary}</p>
+                 </div>
+              </div>
+              <button onClick={()=>setShowSafetyModal(false)} className="w-full mt-8 py-5 bg-teal-600 text-white font-black rounded-2xl uppercase text-xs shadow-xl active:scale-95 hover:bg-teal-700 transition-all">Acknowledge Audit</button>
            </div>
         </div>
       )}
@@ -653,41 +922,56 @@ const App: React.FC = () => {
                 <p className="font-black text-amber-600 uppercase text-sm">{activeAlarmItem.data.d || activeAlarmItem.data.dosage}</p>
                 {activeAlarmItem.type === 'inj' && <p className="text-[10px] font-black text-purple-600 uppercase mt-2">Injection Site: {activeAlarmItem.data.site}</p>}
               </div>
-              <button onClick={() => activeAlarmItem.type === 'med' ? handleMedAction(activeAlarmItem.data.id, 'take') : handleInjectionAction(activeAlarmItem.data.id, 'take')} className="w-full py-6 bg-green-500 text-white font-black text-2xl rounded-3xl uppercase shadow-xl transition-transform active:scale-95">Acknowledge</button>
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={() => activeAlarmItem.type === 'med' ? handleMedAction(activeAlarmItem.data.id, 'take') : handleInjectionAction(activeAlarmItem.data.id, 'take')} 
+                  className="w-full py-6 bg-green-500 text-white font-black text-2xl rounded-3xl uppercase shadow-xl transition-transform active:scale-95"
+                >
+                  Confirm Taken
+                </button>
+                <button 
+                  onClick={() => setActiveAlarmItem(null)} 
+                  className="w-full py-4 bg-gray-100 text-gray-400 font-black text-xs rounded-2xl uppercase transition-transform active:scale-95"
+                >
+                  Dismiss Alert
+                </button>
+              </div>
             </div>
           </div>
       )}
 
       {/* Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t-8 border-teal-50 px-8 py-5 pb-10 flex justify-between items-center z-[800] shadow-2xl">
-        <button onClick={()=>setActiveTab('home')} className={`p-2 transition-all ${activeTab==='home'?'text-teal-600 scale-125':'text-gray-300'}`}><Sun size={28}/></button>
-        <button onClick={()=>setActiveTab('diet')} className={`p-2 transition-all ${activeTab==='diet'?'text-teal-600 scale-125':'text-gray-300'}`}><Utensils size={28}/></button>
-        <button onClick={()=>setActiveTab('chat')} className="w-16 h-16 bg-teal-600 rounded-3xl flex items-center justify-center text-white shadow-xl -mt-10 border-4 border-white transition-transform active:scale-90 hover:scale-110 active:shadow-inner"><MessageCircle size={32}/></button>
-        <button onClick={()=>setActiveTab('vault')} className={`p-2 transition-all ${activeTab==='vault'?'text-teal-600 scale-125':'text-gray-300'}`}><FolderOpen size={28}/></button>
-        <button onClick={()=>setActiveTab('settings')} className={`p-2 transition-all ${activeTab==='settings'?'text-teal-600 scale-125':'text-gray-300'}`}><Settings size={28}/></button>
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t-8 border-teal-50 px-4 py-5 pb-10 flex justify-between items-center z-[800] shadow-2xl">
+        <button onClick={()=>setActiveTab('home')} className={`p-2 transition-all ${activeTab==='home'?'text-teal-600 scale-125':'text-gray-300'}`}><Sun size={24}/></button>
+        <button onClick={()=>setActiveTab('diary')} className={`p-2 transition-all ${activeTab==='diary'?'text-teal-600 scale-125':'text-gray-300'}`}><StickyNote size={24}/></button>
+        <button onClick={()=>setActiveTab('diet')} className={`p-2 transition-all ${activeTab==='diet'?'text-teal-600 scale-125':'text-gray-300'}`}><Utensils size={24}/></button>
+        <button onClick={()=>setActiveTab('chat')} className="w-14 h-14 bg-teal-600 rounded-2xl flex items-center justify-center text-white shadow-xl -mt-8 border-4 border-white transition-transform active:scale-90 hover:scale-110 active:shadow-inner"><MessageCircle size={28}/></button>
+        <button onClick={()=>setActiveTab('vault')} className={`p-2 transition-all ${activeTab==='vault'?'text-teal-600 scale-125':'text-gray-300'}`}><FolderOpen size={24}/></button>
+        <button onClick={()=>setActiveTab('admin')} className={`p-2 transition-all ${activeTab==='admin'?'text-teal-600 scale-125':'text-gray-300'}`}><ShieldCheck size={24}/></button>
+        <button onClick={()=>setActiveTab('settings')} className={`p-2 transition-all ${activeTab==='settings'?'text-teal-600 scale-125':'text-gray-300'}`}><Settings size={24}/></button>
       </nav>
 
       {/* Invisible inputs */}
-      <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => {
-        const f = e.target.files?.[0]; if(!f) return; setLoading(true); const r = new FileReader(); r.onloadend = async () => {
+      <input type="file" ref={fileInputRef} hidden accept="image/*,application/pdf" onChange={(e) => {
+        const f = e.target.files?.[0]; if(!f) return; setLoading(true); const r = new FileReader(); const mime = f.type; r.onloadend = async () => {
           const b64 = (r.result as string).split(',')[1];
           try {
-            const res = await gemini.identifyPill(b64);
-            setMeds([...meds, { id: Date.now(), n: res.n||'Unidentified', d: res.d||'N/A', block: (res.block as any)||'am', status: 'pending', time: '08:00', schedule: DAYS_OF_WEEK, count: 30 }]);
-            setVault([{ id: Date.now(), name: `Pill Scan: ${res.n||'Unidentified'}`, date: new Date().toLocaleDateString(), data: r.result as string, type: 'image' }, ...vault]);
+            const res = await gemini.identifyPill(b64, mime);
+            const commonDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            setMeds([...meds, { id: Date.now(), n: res.n||'Unidentified', d: res.d||'N/A', block: (res.block as any)||'am', status: 'pending', time: (res.block === 'am' ? '08:00' : '20:00'), schedule: commonDays, count: 30 }]);
+            setVault([{ id: Date.now(), name: `Scan: ${res.n||'Unidentified'}`, date: new Date().toLocaleDateString(), data: r.result as string, type: 'image', mime: mime }, ...vault]);
             updateXP(150);
-          } catch(e) { alert("Pill analysis failed."); } finally { setLoading(false); }
+          } catch(e) { alert("Analysis failed."); } finally { setLoading(false); }
         }; r.readAsDataURL(f);
       }} />
-      <input type="file" ref={scriptInputRef} hidden accept="image/*" onChange={(e) => {
-        const f = e.target.files?.[0]; if(!f) return; setLoading(true); const r = new FileReader(); r.onloadend = async () => {
+      <input type="file" ref={scriptInputRef} hidden accept="image/*,application/pdf" onChange={(e) => {
+        const f = e.target.files?.[0]; if(!f) return; setLoading(true); const r = new FileReader(); const mime = f.type; r.onloadend = async () => {
           const b64 = (r.result as string).split(',')[1];
           try {
-            const res = await gemini.analyzePrescription(b64);
-            // Smart routing: update both states
+            const res = await gemini.analyzePrescription(b64, mime);
             setMeds(p => [...p, ...res.meds]);
             setInjections(p => [...p, ...res.injections]);
-            setVault([{ id: Date.now(), name: `Clinical Script Extract`, date: new Date().toLocaleDateString(), data: r.result as string, type: 'image' }, ...vault]);
+            setVault([{ id: Date.now(), name: `Clinical Extract`, date: new Date().toLocaleDateString(), data: r.result as string, type: 'image', mime: mime }, ...vault]);
             updateXP(250);
           } catch(e) { alert("Scan failed."); } finally { setLoading(false); }
         }; r.readAsDataURL(f);
