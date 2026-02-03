@@ -1,0 +1,9 @@
+
+{
+  "name": "Master Meds Pro",
+  "description": "A professional-grade medication management application with AI-powered clinical analysis, pill identification, and injection tracking.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

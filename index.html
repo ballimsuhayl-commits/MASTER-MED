@@ -1,0 +1,56 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Meds Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse-soft { 0%, 100% { transform: scale(1); opacity: 0.6; } 50% { transform: scale(1.05); opacity: 0.8; } }
+        .animate-pulse-soft { animation: pulse-soft 2s infinite ease-in-out; }
+        
+        @keyframes flash-red { 0%, 100% { background-color: #ef4444; } 50% { background-color: #b91c1c; } }
+        .animate-flash-red { animation: flash-red 1.5s infinite; }
+
+        @keyframes clinical-flash { 
+          0%, 100% { background-color: #fffbeb; } 
+          50% { background-color: #fef3c7; outline: 20px solid #fbbf24; } 
+        }
+        .animate-clinical-flash { animation: clinical-flash 0.8s infinite ease-in-out; }
+
+        @keyframes swing {
+          0%, 100% { transform: rotate(-10deg); }
+          50% { transform: rotate(10deg); }
+        }
+        .animate-swing { animation: swing 1s infinite ease-in-out; }
+        
+        body {
+            background-color: #F8FAFC;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            color: #1E293B;
+            -webkit-tap-highlight-color: transparent;
+            transition: background-color 0.3s ease;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.39.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-[#F5F5F5]">
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
